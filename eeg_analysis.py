@@ -3,6 +3,7 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 
+
 ACTIVE_CHANNELS = (2, 5, 6, 8)
 FS = 250
 LOW_CUT = 2.5
@@ -110,6 +111,7 @@ def show_example(eeg_ex_list, config_string):
             ax[i, j].plot(20* np.log10(np.abs(eeg_ex_list[i][j][:int(SAMPLES_PER_FRAME/4), :])))
     return
 
+
 def get_eeg_o_c_b(eeg_in, half_avg_win):
     '''
     Slicing the eeg signal to Open, Closed, Blink, and averaging, for each, 
@@ -149,19 +151,6 @@ if __name__ == '__main__':
         eeg_fft_unfilt.append(np.fft.fftshift(fftpack.fft(sub_mean(eeg_data[i*start_diff:i*start_diff+SAMPLES_PER_FRAME, :])), axes=1))
         eeg_data_centered = sub_mean(eeg_data[i*start_diff:i*start_diff+SAMPLES_PER_FRAME, :])  # - np.matlib.repmat(np.mean(eeg_data[i*start_diff:i*start_diff+SAMPLES_PER_FRAME,:], axis=0),SAMPLES_PER_FRAME, 1)
         eeg_fft_filtered.append(np.fft.fftshift(fftpack.fft(butter_bandpass_filter(eeg_data_centered)), axes=1))
-
-    # if PLOT_EXAMPLE:
-    #     x_tick = np.arange(0., FS / 2, 1)
-    #     r, c = eeg_fft_filtered[0].shape
-    #     t = len(eeg_fft_filtered)
-    #     plt.figure(2)
-    #     ax1 = plt.subplot(211)
-    #     averaged_fil = [avg_timeframe(eeg_fft_filtered[k:k + 10])[:int(SAMPLES_PER_FRAME/2), :] for k in np.arange(0, t - 10, 10)]
-    #     plt.plot(x_tick, 20 * np.log10(np.abs(averaged_fil[1])))
-    #
-    #     ax2 = plt.subplot(212)
-    #     averaged_unfil = [avg_timeframe(eeg_fft_unfilt[k:k + 10])[:int(SAMPLES_PER_FRAME/2), :] for k in np.arange(0, t - 10, 10)]
-    #     plt.plot(x_tick, 20 * np.log10(np.abs(averaged_unfil[1])))
 
     eeg_list = get_eeg_o_c_b(eeg_fft_filtered, HALF_WIN_AVG)
     configs = 'Overlap factor - ' + str(OVERLAP) + ' || Avg_window - ' + str(HALF_WIN_AVG)
