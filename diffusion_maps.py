@@ -1,10 +1,6 @@
 
 import numpy as np
 from numpy import linalg as LA
-from PIL import Image
-import matplotlib.cm as cm
-import matplotlib.pyplot as plt
-from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 import os, math
 
 newDim = 64
@@ -20,36 +16,6 @@ def normalize(arr):
 def weightedAverage(pixel):
     return 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]
 
-
-def getImgData(path, preview=True):
-    filelist = os.listdir(path)
-    imglist = []
-    for filename in filelist:
-        img = Image.open(path + filename)
-        img = img.resize((newDim, newDim))
-        img = np.asarray(img)
-
-        grey = np.zeros((img.shape[0], img.shape[1]))  # init 2D numpy array
-        for rownum in range(len(img)):
-            for colnum in range(len(img[rownum])):
-                grey[rownum][colnum] = weightedAverage(img[rownum][colnum])
-
-        grey = normalize(grey)
-        imglist.append(grey)
-
-    data = []
-    for img in imglist:
-        vector = img.flatten()
-        data.append(vector)
-
-    if preview:
-        for img in imglist:
-            plt.imshow(img, cmap=cm.Greys_r)
-            plt.show()
-
-    return data
-
-
 def diffusionMapping(data, k, t, **kwargs):
     try:
         kwargs['dim'] or kwargs['delta']
@@ -63,25 +29,25 @@ def diffusionMapping(data, k, t, **kwargs):
 
     # construct Markov matrix
     v = []
-    for x in X:
+    for x in X:  # for each vector in data
         vx = 0
-        for y in X:
+        for y in X:  # compare with every other vectors in data
             _x = np.array(dataList[x])
             _y = np.array(dataList[y])
             vx += k(_x, _y)
-        v.append(math.sqrt(vx))
+        v.append(math.sqrt(vx))    # v_i is sum_over_j(sqrt( k(x_i, y_j) ) )
 
-    a = []
+    p = []
     for x in X:
-        a.append([])
+        p.append([])
         for y in X:
             _x = np.array(dataList[x])
             _y = np.array(dataList[y])
-            a[x].append(k(_x, _y) / (v[x] * v[y]))
+            p[x].append(k(_x, _y) / (v[x] * v[y]))
 
     # compute eigenvectors of (a_ij)
     phi = []
-    eigval, eigvec = LA.eigh(np.array(a))
+    eigval, eigvec = LA.eigh(np.array(p))
     for i in range(len(eigvec)):
         phi.append(eigvec[:, i])
     # reverse order
@@ -108,40 +74,36 @@ def diffusionMapping(data, k, t, **kwargs):
     return (Psi, dataList)
 
 
-data = getImgData("__img/", False)
 
-
-showImages = False
-
-coordinates, dataList = diffusionMapping(data, lambda x, y: math.exp(-LA.norm(x - y) / 1024), 1, dim=2)
-a = np.asarray(coordinates)
-x = a[:, 0]
-y = a[:, 1]
-fig, ax = plt.subplots()
-
-j = 0
-
-if showImages:
-    squareLength = math.sqrt(len(dataList[0]))
-    square = (squareLength, squareLength)
-    for xpt, ypt in zip(x, y):
-        img = np.array(dataList[j]).reshape(square)[::2, ::2]
-        ab = AnnotationBbox(OffsetImage(img, cmap=cm.Greys_r), [xpt, ypt],
-                            xybox=(65., 0),
-                            xycoords='data',
-                            boxcoords="offset points",
-                            frameon=False,
-                            arrowprops=dict(arrowstyle="->"))
-        ax.add_artist(ab)
-        j = j + 1
-else:
-    labels = ['image {0}'.format(i + 1) for i in range(len(x))]
-    for label, xpt, ypt in zip(labels, x, y):
-        plt.annotate(
-            label,
-            xy=(xpt, ypt), xytext=(-20, 20),
-            textcoords='offset points', ha='right', va='bottom',
-            bbox=dict(boxstyle='round,pad=0.5', fc='white', alpha=0.5),
-            arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
-ax.plot(x, y, 'ro')
-plt.show()
+# showImages = False
+#
+# coordinates, dataList = diffusionMapping(data, lambda x, y: math.exp(-LA.norm(x - y) / 1024), 1, dim=2)
+# a = np.asarray(coordinates)
+# x = a[:, 0]
+# y = a[:, 1]
+# fig, ax = plt.subplots()
+# j = 0
+# if showImages:
+#     squareLength = math.sqrt(len(dataList[0]))
+#     square = (squareLength, squareLength)
+#     for xpt, ypt in zip(x, y):
+#         img = np.array(dataList[j]).reshape(square)[::2, ::2]
+#         ab = AnnotationBbox(OffsetImage(img, cmap=cm.Greys_r), [xpt, ypt],
+#                             xybox=(65., 0),
+#                             xycoords='data',
+#                             boxcoords="offset points",
+#                             frameon=False,
+#                             arrowprops=dict(arrowstyle="->"))
+#         ax.add_artist(ab)
+#         j = j + 1
+# else:
+#     labels = ['image {0}'.format(i + 1) for i in range(len(x))]
+#     for label, xpt, ypt in zip(labels, x, y):
+#         plt.annotate(
+#             label,
+#             xy=(xpt, ypt), xytext=(-20, 20),
+#             textcoords='offset points', ha='right', va='bottom',
+#             bbox=dict(boxstyle='round,pad=0.5', fc='white', alpha=0.5),
+#             arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+# ax.plot(x, y, 'ro')
+# plt.show()

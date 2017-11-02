@@ -1,7 +1,11 @@
 from scipy import signal, fftpack
 import numpy as np
+from numpy import linalg as LA
 import os
 import matplotlib.pyplot as plt
+import diffusion_maps as dm
+import math
+import matplotlib
 
 
 ACTIVE_CHANNELS = (2, 5, 6, 8)
@@ -132,29 +136,106 @@ def get_eeg_o_c_b(eeg_in, half_avg_win):
     eeg_blink = [avg_timeframe(eeg_in[x - half_avg_win:x + half_avg_win]) for x in time_frames['blink']]
     return [eeg_open, eeg_closed, eeg_blink]
 
+def get_aviv_exp_timeframes(eeg_in):
+    '''
+    ** According to experiment specific parameters **
+    extracting labels and legend for Aviv experiment
+    :param eeg_in: 
+    :return: labels, legend
+    '''
+    legend = {0: 'open',
+              1: 'blink',
+              2: 'closed'}
+    session_len = len(eeg_in)
+    samples_per_mode = int(20 / (TIME_FRAME * OVERLAP) )
+    labels = np.zeros(session_len)
+    start_indices = range(samples_per_mode, session_len, 2 * samples_per_mode)
+
+    for j, start_ind in enumerate(start_indices):
+        if start_ind+20 >= session_len:
+            continue
+        if j % 2 == 0:
+            # asserting blink label
+            labels[start_ind:start_ind+20] = 1
+        else:
+            # asserting closed
+            labels[start_ind:start_ind + 20] = 2
+    return labels, legend
+
+def load_and_filter_data(path):
+    '''
+    loads the file in the specific path,
+    dividing it to windows according to global parameters,
+    and performing FFT + Filtering of the signal
+    :param path: 
+    :return: FFT unfiltered
+             FFT filtered
+    '''
+    eeg_data = np.loadtxt(path, comments='%', skiprows=7, usecols=ACTIVE_CHANNELS, delimiter=',')
+    start_diff = int(SAMPLES_PER_FRAME - SAMPLES_PER_FRAME * OVERLAP)
+    nWindows = int(eeg_data.shape[0] / start_diff)
+    eeg_fft_filtered = []
+    eeg_fft_unfilt = []
+    for i in range(nWindows):
+        eeg_fft_unfilt.append(
+            np.fft.fftshift(fftpack.fft(sub_mean(eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME, :])),
+                            axes=1))
+        eeg_data_centered = sub_mean(eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME,
+                                     :])  # - np.matlib.repmat(np.mean(eeg_data[i*start_diff:i*start_diff+SAMPLES_PER_FRAME,:], axis=0),SAMPLES_PER_FRAME, 1)
+        eeg_fft_filtered.append(np.fft.fftshift(fftpack.fft(butter_bandpass_filter(eeg_data_centered)), axes=1))
+    return eeg_fft_unfilt, eeg_fft_filtered
+
+
+def show_diffusion(coordinates, labels_list, legend):
+    fig, axes = plt.subplots(2,2)
+    colors = ['red', 'green', 'blue']
+    i = 0
+    for coords, labels in zip(coordinates, labels_list):
+        a = np.asarray(coords)
+        x = a[:, 0]
+        y = a[:, 1]
+        for label in legend:
+            cur_label = legend[label]
+            axes[int(i/2)][i % 2].scatter(x[labels==label], y[labels==label], c=colors[label], label=cur_label)
+        i += 1
+    plt.legend()
+    plt.show()
 
 if __name__ == '__main__':
     # --- Part A - loading saved data (working offline) --- #
     # ----------------------------------------------------- #
-    records_path = 'C:\\Users\\ranbenizhak\\OneDrive\\BCI\\BCI_project\\Data\\'
+    cur_path = os.path.dirname(os.path.realpath(__file__))
+    records_path = os.path.join(cur_path, 'Data')
     # records_path = 'C:\\Users\\ranbenizhak\\OneDrive\\BCI\\BCI_project\\Data\\'
     file_names = os.listdir(records_path)
-    full_paths = [records_path + fn for fn in file_names if 'Aviv' in fn]
-    # currently working with channels 2,5,6,8
-    eeg_data = np.loadtxt(full_paths[0], comments='%', skiprows=7, usecols=ACTIVE_CHANNELS, delimiter=',')
+    full_paths = [os.path.join(records_path, fn) for fn in file_names if 'Aviv' in fn]
 
-    start_diff = int(SAMPLES_PER_FRAME - SAMPLES_PER_FRAME * OVERLAP)
-    nWindows = int(eeg_data.shape[0]/start_diff)
-    eeg_fft_filtered = []
-    eeg_fft_unfilt = []
-    for i in range(nWindows):
-        eeg_fft_unfilt.append(np.fft.fftshift(fftpack.fft(sub_mean(eeg_data[i*start_diff:i*start_diff+SAMPLES_PER_FRAME, :])), axes=1))
-        eeg_data_centered = sub_mean(eeg_data[i*start_diff:i*start_diff+SAMPLES_PER_FRAME, :])  # - np.matlib.repmat(np.mean(eeg_data[i*start_diff:i*start_diff+SAMPLES_PER_FRAME,:], axis=0),SAMPLES_PER_FRAME, 1)
-        eeg_fft_filtered.append(np.fft.fftshift(fftpack.fft(butter_bandpass_filter(eeg_data_centered)), axes=1))
+    # # ==== Displaying averaging examples for different modes (open/closed/blink) ==== #
+    # # =================  currently working with channels 2,5,6,8 ==================== #
 
-    eeg_list = get_eeg_o_c_b(eeg_fft_filtered, HALF_WIN_AVG)
-    configs = 'Overlap factor - ' + str(OVERLAP) + ' || Avg_window - ' + str(HALF_WIN_AVG)
-    show_example(eeg_list, configs)
+    # eeg_fft_unfilt, eeg_fft_filtered = load_and_filter_data(full_paths[0])
+
+    # eeg_list = get_eeg_o_c_b(eeg_fft_filtered, HALF_WIN_AVG)
+    # configs = 'Overlap factor - ' + str(OVERLAP) + ' || Avg_window - ' + str(HALF_WIN_AVG)
+    # show_example(eeg_list, configs)
+
+    # ======= Diffusion maps for data ========= #
+    coords_out, labels_out = [], []
+    for data_path in full_paths:
+        eeg_fft_unfilt, eeg_fft_filt = load_and_filter_data(data_path)
+        labels, legend = get_aviv_exp_timeframes(eeg_fft_unfilt)
+        eeg_flatten = np.asarray([x.flatten() for x in eeg_fft_unfilt])
+
+        epsilon = 1000  # diffusion distance epsilon
+        coords, dataList = dm.diffusionMapping(eeg_flatten[:-1],
+                                                lambda x, y: math.exp(-LA.norm(x - y) / epsilon),
+                                                2, dim=2)
+        labels_out.append(labels[:-1])
+        coords_out.append(coords)
+    show_diffusion(coords_out, labels_out, legend)
+    ttt = 5
+
+
 
 
 
