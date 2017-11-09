@@ -5,7 +5,7 @@ import os
 import matplotlib.pyplot as plt
 import diffusion_maps as dm
 import math
-import matplotlib
+from mpl_toolkits.mplot3d import Axes3D
 
 
 ACTIVE_CHANNELS = (2, 5, 6, 8)
@@ -162,7 +162,7 @@ def get_aviv_exp_timeframes(eeg_in):
             labels[start_ind:start_ind + 20] = 2
     return labels, legend
 
-def load_and_filter_data(path):
+def load_and_filter_data(path, filter=True):
     '''
     loads the file in the specific path,
     dividing it to windows according to global parameters,
@@ -177,27 +177,48 @@ def load_and_filter_data(path):
     eeg_fft_filtered = []
     eeg_fft_unfilt = []
     for i in range(nWindows):
-        eeg_fft_unfilt.append(
-            np.fft.fftshift(fftpack.fft(sub_mean(eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME, :])),
-                            axes=1))
-        eeg_data_centered = sub_mean(eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME,
-                                     :])  # - np.matlib.repmat(np.mean(eeg_data[i*start_diff:i*start_diff+SAMPLES_PER_FRAME,:], axis=0),SAMPLES_PER_FRAME, 1)
-        eeg_fft_filtered.append(np.fft.fftshift(fftpack.fft(butter_bandpass_filter(eeg_data_centered)), axes=1))
+        if filter:
+            eeg_fft_unfilt.append(
+                np.fft.fftshift(fftpack.fft(sub_mean(eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME, :])),
+                                axes=1))
+            eeg_data_centered = sub_mean(eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME,
+                                         :])  # - np.matlib.repmat(np.mean(eeg_data[i*start_diff:i*start_diff+SAMPLES_PER_FRAME,:], axis=0),SAMPLES_PER_FRAME, 1)
+            eeg_fft_filtered.append(np.fft.fftshift(fftpack.fft(butter_bandpass_filter(eeg_data_centered)), axes=1))
+        else:
+            eeg_fft_unfilt.append(sub_mean(eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME, :]))
+
     return eeg_fft_unfilt, eeg_fft_filtered
 
 
 def show_diffusion(coordinates, labels_list, legend):
-    fig, axes = plt.subplots(2,2)
     colors = ['red', 'green', 'blue']
     i = 0
     for coords, labels in zip(coordinates, labels_list):
+        fig = plt.figure()
         a = np.asarray(coords)
         x = a[:, 0]
-        y = a[:, 1]
-        for label in legend:
-            cur_label = legend[label]
-            axes[int(i/2)][i % 2].scatter(x[labels==label], y[labels==label], c=colors[label], label=cur_label)
+        if a.shape[1] > 1:
+            y = a[:, 1]
+        else:
+            y = np.zeros(x.shape)
+        if a.shape[1] == 3:
+            ax = fig.gca(projection='3d')
+            z = a[:, 2]
+            for label in legend:
+                cur_label = legend[label]
+                Axes3D.scatter(ax, np.asarray(x[labels==label]), np.asarray(y[labels==label]),
+                               np.asarray(z[labels==label]), c=colors[label], label=cur_label)
+                plt.show()
+
+        else:
+            ax = fig.gca()
+            for label in legend:
+                cur_label = legend[label]
+                ax.scatter(np.asarray(x[labels==label]), np.asarray(y[labels==label]),
+                           c=colors[label], label=cur_label)
+                plt.show()
         i += 1
+
     plt.legend()
     plt.show()
 
@@ -221,15 +242,16 @@ if __name__ == '__main__':
 
     # ======= Diffusion maps for data ========= #
     coords_out, labels_out = [], []
-    for data_path in full_paths:
+    for data_path in full_paths:   # for each experiment
         eeg_fft_unfilt, eeg_fft_filt = load_and_filter_data(data_path)
+        # eeg_unfilt, eeg_filt = load_and_filter_data(data_path, filter=False)
         labels, legend = get_aviv_exp_timeframes(eeg_fft_unfilt)
         eeg_flatten = np.asarray([x.flatten() for x in eeg_fft_unfilt])
 
         epsilon = 1000  # diffusion distance epsilon
-        coords, dataList = dm.diffusionMapping(eeg_flatten[:-1],
+        coords, dataList = dm.diffusionMapping(np.transpose(eeg_flatten[:-1]),
                                                 lambda x, y: math.exp(-LA.norm(x - y) / epsilon),
-                                                2, dim=2)
+                                                t=2, dim=2)
         labels_out.append(labels[:-1])
         coords_out.append(coords)
     show_diffusion(coords_out, labels_out, legend)
