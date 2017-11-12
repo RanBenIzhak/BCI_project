@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import diffusion_maps as dm
 import math
 from mpl_toolkits.mplot3d import Axes3D
+import time
 
 
 ACTIVE_CHANNELS = (2, 5, 6, 8)
@@ -222,6 +223,7 @@ def show_diffusion(coordinates, labels_list, legend):
     plt.legend()
     plt.show()
 
+
 if __name__ == '__main__':
     # --- Part A - loading saved data (working offline) --- #
     # ----------------------------------------------------- #
@@ -251,7 +253,7 @@ if __name__ == '__main__':
         epsilon = 1000  # diffusion distance epsilon
         coords, dataList = dm.diffusionMapping(np.transpose(eeg_flatten[:-1]),
                                                 lambda x, y: math.exp(-LA.norm(x - y) / epsilon),
-                                                t=2, dim=2)
+                                                t=2, dim=3)
         labels_out.append(labels[:-1])
         coords_out.append(coords)
     show_diffusion(coords_out, labels_out, legend)
