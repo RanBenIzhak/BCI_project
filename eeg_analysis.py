@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 import diffusion_maps as dm
 import math
 from mpl_toolkits.mplot3d import Axes3D
+from sklearn.neighbors import KNeighborsClassifier as knn
+from sklearn.model_selection import cross_val_score
+from sklearn import manifold, decomposition
 import time
 
 
@@ -19,6 +22,70 @@ TIME_FRAME= 1      #[Sec]        ##############
 SAMPLES_PER_FRAME= TIME_FRAME * FS      #(TIME_FRAME/FS)*SAMPLES_PER_FRAME<=1 ##############
 HALF_WIN_AVG = 5
 PLOT_EXAMPLE = False
+# ===== KNN constants ==== #
+N_NEIGHBORS = 3
+
+n_components = 5 #ALL
+n_neighbors = 5  #LLE, Isomap
+
+def show_embedded(coordinates, labels, legend):
+    fig = plt.figure()
+    colors = ['red', 'green', 'blue']
+    a = np.asarray(coordinates)
+    x = a[:, 0]
+    y = a[:, 1]
+    for label in legend:
+        cur_label = legend[label]
+        plt.scatter(x[labels==label], y[labels==label], c=colors[label], label=cur_label)
+    plt.legend()
+    plt.show()
+
+def show_3D(X_embedded, labels, fig, meth, domain):
+        ax = fig.add_subplot(111, projection='3d')
+        plt.title('Method = %s, Domain = %s' % (meth, domain))
+        for i in np.sort(np.unique(labels)):
+            indices= labels == i
+            ax.scatter(np.asarray(X_embedded[indices,0]),np.asarray(X_embedded[indices,1]),np.asarray(X_embedded[indices,2]),label=legend[i])
+        plt.show()
+
+def visualize_eeg(eeg_data, labels, legend, fs, domain='Freq', meth='tsne', dim=2):
+    '''
+    Visualize the input eeg data in time domain
+    :param eeg_data: 2d time domain eeg data - [samples, channels]
+    :param fs: sample frequency (for axis labels)
+    :param labels: labels of eeg dataset according to labels
+    :param legend: legend of data and labels tagging
+    :param domain: 'Time'/ 'Freq' - the domain we want to visualize in. Note: Data is recived in frequency domain and entering time does not take mean into account 
+    :param meth: 'tsne'/ 'lle'/ 'pca'/ 'isomap' - the method used for data embedding in lower dimensional space
+    :param dim: 2(default)/ 3 - the dimenssion to show the data in
+    :return: None
+    '''
+
+    # preform lower dimenstional embbeding and show the results
+    if meth=='tsne':
+ #       print eeg_data.shape
+ #       eeg_data_float64 = np.asarray(eeg_data).astype('float64')
+ #       eeg_data_float64 = eeg_data_float64.reshape((eeg_data_float64.shape[0], -1))
+        X_embedded=manifold.TSNE(dim).fit_transform(eeg_data)
+    elif meth=='lle':
+        X_embedded= manifold.LocallyLinearEmbedding(n_neighbors, dim,eigen_solver='auto', method='standard').fit_transform(X)
+    elif meth=='pca':
+        X_embedded=decomposition.PCA(dim).fit_transform(eeg_data)
+    elif meth=='isomap':
+        X_embedded=manifold.Isomap(n_neighbors, dim).fit_transform(eeg_data)
+    # If we want to visualize in frequency domain/time domain
+    # if domain=='Time':
+    #     X_embedded=np.fft.ifftshift(fftpack.ifft((eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME, :]),
+    #                         axes=1))
+    #Plot the data visualization
+    # fig = plt.figure()
+    if dim==2:
+        show_embedded(X_embedded,labels,legend)
+    elif dim==3:
+        fig = plt.figure()
+        show_3D(X_embedded,labels,fig,meth,domain)
+    else:
+        print("Please set dimension to 2/3 for visualization")
 
 def datestr2num(time_str):
     h, m, s = time_str.split(':')
@@ -94,7 +161,6 @@ def sub_mean(eeg_frame):
     rows = eeg_frame.shape[0]
     eeg_frame_mean = np.matlib.repmat(np.mean(eeg_frame, axis=0), rows, 1)
     return eeg_frame - eeg_frame_mean
-# -------- Functions end --------------
 
 def show_example(eeg_ex_list, config_string):
     '''
@@ -116,7 +182,6 @@ def show_example(eeg_ex_list, config_string):
             ax[i, j].plot(20* np.log10(np.abs(eeg_ex_list[i][j][:int(SAMPLES_PER_FRAME/4), :])))
     return
 
-
 def get_eeg_o_c_b(eeg_in, half_avg_win):
     '''
     Slicing the eeg signal to Open, Closed, Blink, and averaging, for each, 
@@ -136,7 +201,6 @@ def get_eeg_o_c_b(eeg_in, half_avg_win):
     eeg_closed = [avg_timeframe(eeg_in[x - half_avg_win:x + half_avg_win]) for x in time_frames['closed']]
     eeg_blink = [avg_timeframe(eeg_in[x - half_avg_win:x + half_avg_win]) for x in time_frames['blink']]
     return [eeg_open, eeg_closed, eeg_blink]
-
 
 def get_aviv_exp_timeframes(eeg_in):
     '''
@@ -164,7 +228,6 @@ def get_aviv_exp_timeframes(eeg_in):
             labels[start_ind:start_ind + 20] = 2
     return labels, legend
 
-
 def load_and_filter_data(path, filter=True):
     '''
     loads the file in the specific path,
@@ -191,7 +254,6 @@ def load_and_filter_data(path, filter=True):
             eeg_fft_unfilt.append(sub_mean(eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME, :]))
 
     return eeg_fft_unfilt, eeg_fft_filtered
-
 
 def show_diffusion(coordinates, labels_list, legend):
     colors = ['red', 'green', 'blue']
@@ -223,7 +285,46 @@ def show_diffusion(coordinates, labels_list, legend):
         i += 1
 
     plt.legend()
-    plt.show()
+
+def chunkify(lst, n):
+    return [lst[i::n] for i in range(n)]
+
+def knn_clustering(data, labels, neighbors_num=N_NEIGHBORS):
+    '''
+    
+    :param data: 
+    :param labels: 
+    :return: 
+    '''
+    accuracy = []
+    neigh = knn(n_neighbors=neighbors_num)
+    for d, l in zip(data, labels):
+        combined = list(zip(d, l))
+        np.random.shuffle(combined)
+        d,l = zip(*combined)
+        score = cross_val_score(estimator=neigh, X=d, y=l, cv=5)
+        accuracy = accuracy + list(score)
+    pred_mean = np.mean(accuracy)
+    pred_std = np.std(accuracy)
+    return pred_mean, pred_std
+
+def pair_wise_knn(data, labels):
+    '''
+    0 vs 1, 1 vs 2, 0 vs 2
+    :param data: 
+    :param labels: 
+    :return: 
+    '''
+    data_0 = data(labels == 0)
+    labels_0 = labels(labels == 0)
+    data_1 = data(labels == 1)
+    labels_1 = labels(labels == 1)
+    data_2 = data(labels == 2)
+    labels_2 = labels(labels == 2)
+    pred_0v1, std_0v1 = knn_clustering(data_0 + data_1, labels_0 + labels_1)
+    pred_0v2, std_0v2 = knn_clustering(data_0 + data_2, labels_0 + labels_2)
+    pred_1v2, std_1v2 = knn_clustering(data_2 + data_1, labels_2 + labels_1)
+    return (pred_0v1, std_0v1), (pred_0v2, std_0v2), (pred_1v2, std_1v2)
 
 
 if __name__ == '__main__':
@@ -244,22 +345,41 @@ if __name__ == '__main__':
     # configs = 'Overlap factor - ' + str(OVERLAP) + ' || Avg_window - ' + str(HALF_WIN_AVG)
     # show_example(eeg_list, configs)
 
-    # ======= Diffusion maps for data ========= #
-    coords_out, labels_out = [], []
-    for data_path in full_paths:   # for each experiment
-        eeg_fft_unfilt, eeg_fft_filt = load_and_filter_data(data_path)
-        # eeg_unfilt, eeg_filt = load_and_filter_data(data_path, filter=False)
-        eeg_filt_cut = [x[10:100, :] for x in eeg_fft_unfilt]
-        labels, legend = get_aviv_exp_timeframes(eeg_filt_cut)
-        eeg_flatten = np.asarray([x.flatten() for x in eeg_filt_cut])
 
-        epsilon = 1000  # diffusion distance epsilon
-        coords, dataList = dm.diffusionMapping(eeg_flatten[:-1],
-                                                lambda x, y: math.exp(-LA.norm(x - y) / epsilon),
-                                                t=2, dim=3)
-        labels_out.append(labels[:-1])
-        coords_out.append(coords)
-    show_diffusion(coords_out, labels_out, legend)
+
+    # ======= Diffusion maps for data ========= #
+    for dimension in range(3,5):
+
+        coords_out, labels_out = [], []
+        for data_path in full_paths:  # for each experiment
+            eeg_fft_unfilt, eeg_fft_filt = load_and_filter_data(data_path)
+            # eeg_unfilt, eeg_filt = load_and_filter_data(data_path, filter=False)
+            eeg_filt_cut = [x[10:100, :] for x in eeg_fft_unfilt]
+            labels, legend = get_aviv_exp_timeframes(eeg_filt_cut)
+            eeg_flatten = np.asarray([x.flatten() for x in eeg_filt_cut])
+
+            visualize_eeg(eeg_flatten[:-1], labels[:-1], legend, FS, domain='Freq', meth='tsne', dim=3)
+
+            epsilon = 1000  # diffusion distance epsilon
+            coords, dataList, eigvals = dm.diffusionMapping(eeg_flatten[:-1],
+                                                   lambda x, y: math.exp(-LA.norm(x - y) / epsilon),
+                                                   t=2, dim=dimension)
+            labels_out.append(labels[:-1])
+            coords_out.append(coords)
+
+        # for nn in range(3,9,2):
+        zero_v_one, pred_std = pair_wise_knn(coords_out, labels_out)
+
+        print("Diffusion Dimension - " + str(dimension))
+        print("Neighbors num - " + str(N_NEIGHBORS))
+        print("Accuracy mean=" + str(pred_mean) + "   STD=" + str(pred_std))
+        print("Eigan Values - ")
+        print(str(eigvals))
+        print("==========================================================")
+    # show_diffusion(coords_out, labels_out, legend)
+
+    # ===== Calculating clusters centers ===== #
+    # pred_mean, pred_std = knn_clustering(coords_out, labels_out)
     ttt = 5
 
 

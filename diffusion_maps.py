@@ -71,7 +71,7 @@ def diffusionMapping(data, k, t, **kwargs):
         for j in range(embeddim):
             i = j + 1  # ignore the first eigenvector/value as this is only constant
             Psi[x].append((eigval[i] ** t) * phi[i][x] / v[x])
-    return (Psi, dataList)
+    return (Psi, dataList, eigval[:embeddim])
 
 
 
