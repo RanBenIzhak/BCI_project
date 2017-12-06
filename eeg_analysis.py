@@ -12,7 +12,7 @@ import time
 ACTIVE_CHANNELS = (2, 5, 6, 8)
 FS = 250
 LOW_CUT = 2.5
-HIGH_CUT = 40
+HIGH_CUT = 22
 ORDER = 8       # up to 8
 OVERLAP=0.5     #   0-0.5   ##############
 TIME_FRAME= 1      #[Sec]        ##############
@@ -137,6 +137,7 @@ def get_eeg_o_c_b(eeg_in, half_avg_win):
     eeg_blink = [avg_timeframe(eeg_in[x - half_avg_win:x + half_avg_win]) for x in time_frames['blink']]
     return [eeg_open, eeg_closed, eeg_blink]
 
+
 def get_aviv_exp_timeframes(eeg_in):
     '''
     ** According to experiment specific parameters **
@@ -162,6 +163,7 @@ def get_aviv_exp_timeframes(eeg_in):
             # asserting closed
             labels[start_ind:start_ind + 20] = 2
     return labels, legend
+
 
 def load_and_filter_data(path, filter=True):
     '''
@@ -247,11 +249,12 @@ if __name__ == '__main__':
     for data_path in full_paths:   # for each experiment
         eeg_fft_unfilt, eeg_fft_filt = load_and_filter_data(data_path)
         # eeg_unfilt, eeg_filt = load_and_filter_data(data_path, filter=False)
-        labels, legend = get_aviv_exp_timeframes(eeg_fft_unfilt)
-        eeg_flatten = np.asarray([x.flatten() for x in eeg_fft_unfilt])
+        eeg_filt_cut = [x[10:100, :] for x in eeg_fft_unfilt]
+        labels, legend = get_aviv_exp_timeframes(eeg_filt_cut)
+        eeg_flatten = np.asarray([x.flatten() for x in eeg_filt_cut])
 
         epsilon = 1000  # diffusion distance epsilon
-        coords, dataList = dm.diffusionMapping(np.transpose(eeg_flatten[:-1]),
+        coords, dataList = dm.diffusionMapping(eeg_flatten[:-1],
                                                 lambda x, y: math.exp(-LA.norm(x - y) / epsilon),
                                                 t=2, dim=3)
         labels_out.append(labels[:-1])
