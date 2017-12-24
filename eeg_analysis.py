@@ -218,14 +218,18 @@ def get_aviv_exp_timeframes(eeg_in):
     start_indices = range(samples_per_mode, session_len, 2 * samples_per_mode)
 
     for j, start_ind in enumerate(start_indices):
-        if start_ind+20 >= session_len:
+        if start_ind + samples_per_mode >= session_len:
+            if j % 2 == 0:
+                labels[start_ind:] = 1
+            else:
+                labels[start_ind:] = 2
             continue
         if j % 2 == 0:
             # asserting blink label
-            labels[start_ind:start_ind+20] = 1
+            labels[start_ind:start_ind+samples_per_mode] = 1
         else:
             # asserting closed
-            labels[start_ind:start_ind + 20] = 2
+            labels[start_ind:start_ind + samples_per_mode] = 2
     return labels, legend
 
 def load_and_filter_data(path, filter=True):
@@ -308,24 +312,30 @@ def knn_clustering(data, labels, neighbors_num=N_NEIGHBORS):
     pred_std = np.std(accuracy)
     return pred_mean, pred_std
 
-def pair_wise_knn(data, labels):
+def extract_state(data, labels, label_to_extract):
+    d_out = []
+    l_out = []
+    for d,l in zip(data,labels):
+        cur_d = [d1 for d1, l1 in zip(d,l) if l1 == label_to_extract]
+        cur_l = [l1 for l1 in l if l1 == label_to_extract]
+        d_out.append(cur_d)
+        l_out.append(cur_l)
+    return d_out, l_out
+
+def pair_wise_knn(data, labels, nn=3):
     '''
-    0 vs 1, 1 vs 2, 0 vs 2
+     0 vs 2 (open vs closed)
     :param data: 
     :param labels: 
     :return: 
     '''
-    data_0 = data(labels == 0)
-    labels_0 = labels(labels == 0)
-    data_1 = data(labels == 1)
-    labels_1 = labels(labels == 1)
-    data_2 = data(labels == 2)
-    labels_2 = labels(labels == 2)
-    pred_0v1, std_0v1 = knn_clustering(data_0 + data_1, labels_0 + labels_1)
-    pred_0v2, std_0v2 = knn_clustering(data_0 + data_2, labels_0 + labels_2)
-    pred_1v2, std_1v2 = knn_clustering(data_2 + data_1, labels_2 + labels_1)
-    return (pred_0v1, std_0v1), (pred_0v2, std_0v2), (pred_1v2, std_1v2)
-
+    data_0, labels_0 = extract_state(data, labels, 0)
+    # data_1, labels_1 = extract_state(data, labels, 1)
+    data_2, labels_2 = extract_state(data, labels, 2)
+    data_02 = [d0 + d2 for d0, d2 in zip(data_0, data_2)]
+    labels_02 = [l0 + l2 for l0, l2 in zip(labels_0, labels_2)]
+    pred_0v2, std_0v2 = knn_clustering(data_02, labels_02, neighbors_num=nn)
+    return (pred_0v2, std_0v2)
 
 if __name__ == '__main__':
     # --- Part A - loading saved data (working offline) --- #
@@ -348,7 +358,7 @@ if __name__ == '__main__':
 
 
     # ======= Diffusion maps for data ========= #
-    for dimension in range(3,5):
+    for dimension in range(2,5):
 
         coords_out, labels_out = [], []
         for data_path in full_paths:  # for each experiment
@@ -358,7 +368,8 @@ if __name__ == '__main__':
             labels, legend = get_aviv_exp_timeframes(eeg_filt_cut)
             eeg_flatten = np.asarray([x.flatten() for x in eeg_filt_cut])
 
-            visualize_eeg(eeg_flatten[:-1], labels[:-1], legend, FS, domain='Freq', meth='tsne', dim=3)
+            # other embedding visualization methods
+            # visualize_eeg(eeg_flatten[:-1], labels[:-1], legend, FS, domain='Freq', meth='tsne', dim=3)
 
             epsilon = 1000  # diffusion distance epsilon
             coords, dataList, eigvals = dm.diffusionMapping(eeg_flatten[:-1],
@@ -367,20 +378,21 @@ if __name__ == '__main__':
             labels_out.append(labels[:-1])
             coords_out.append(coords)
 
-        # for nn in range(3,9,2):
-        zero_v_one, pred_std = pair_wise_knn(coords_out, labels_out)
+        for nn in range(3,9,2):
+            zero_v_one = pair_wise_knn(coords_out, labels_out, nn)
 
-        print("Diffusion Dimension - " + str(dimension))
-        print("Neighbors num - " + str(N_NEIGHBORS))
-        print("Accuracy mean=" + str(pred_mean) + "   STD=" + str(pred_std))
-        print("Eigan Values - ")
-        print(str(eigvals))
-        print("==========================================================")
+            print("Diffusion Dimension - " + str(dimension))
+            print("Neighbors num - " + str(nn))
+            print("Accuracy mean=" + str(zero_v_one[0]) + "   STD=" + str(zero_v_one[1]))
+            print("Eigan Values - ")
+            print(str(eigvals))
+            print("==========================================================")
     # show_diffusion(coords_out, labels_out, legend)
 
     # ===== Calculating clusters centers ===== #
     # pred_mean, pred_std = knn_clustering(coords_out, labels_out)
     ttt = 5
+
 
 
 
