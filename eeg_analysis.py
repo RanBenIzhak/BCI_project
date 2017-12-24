@@ -8,7 +8,7 @@ import math
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.neighbors import KNeighborsClassifier as knn
 from sklearn.model_selection import cross_val_score
-from sklearn import manifold, decomposition
+from sklearn import manifold, decomposition, svm
 import time
 
 
@@ -24,9 +24,11 @@ HALF_WIN_AVG = 5
 PLOT_EXAMPLE = False
 # ===== KNN constants ==== #
 N_NEIGHBORS = 3
-
 n_components = 5 #ALL
 n_neighbors = 5  #LLE, Isomap
+# ==== Diffusion parameters ==== #
+DIM_RNG_LOW = 1
+DIM_RNG_HIGH = 6
 
 def show_embedded(coordinates, labels, legend):
     fig = plt.figure()
@@ -213,7 +215,7 @@ def get_aviv_exp_timeframes(eeg_in):
               1: 'blink',
               2: 'closed'}
     session_len = len(eeg_in)
-    samples_per_mode = int(20 / (TIME_FRAME * OVERLAP) )
+    samples_per_mode = int(20 / (TIME_FRAME * (1 - OVERLAP)))
     labels = np.zeros(session_len)
     start_indices = range(samples_per_mode, session_len, 2 * samples_per_mode)
 
@@ -262,31 +264,31 @@ def load_and_filter_data(path, filter=True):
 def show_diffusion(coordinates, labels_list, legend):
     colors = ['red', 'green', 'blue']
     i = 0
-    for coords, labels in zip(coordinates, labels_list):
-        fig = plt.figure()
-        a = np.asarray(coords)
-        x = a[:, 0]
-        if a.shape[1] > 1:
-            y = a[:, 1]
-        else:
-            y = np.zeros(x.shape)
-        if a.shape[1] == 3:
-            ax = fig.gca(projection='3d')
-            z = a[:, 2]
-            for label in legend:
-                cur_label = legend[label]
-                Axes3D.scatter(ax, np.asarray(x[labels==label]), np.asarray(y[labels==label]),
-                               np.asarray(z[labels==label]), c=colors[label], label=cur_label)
-                plt.show()
+    fig = plt.figure()
+    a = np.asarray(coordinates)
+    labels = np.asarray(labels_list)
+    x = a[:, 0]
+    if a.shape[1] > 1:
+        y = a[:, 1]
+    else:
+        y = np.zeros(x.shape)
+    if a.shape[1] >= 3:
+        ax = fig.gca(projection='3d')
+        z = a[:, 2]
+        for label in legend:
+            cur_label = legend[label]
+            Axes3D.scatter(ax, np.asarray(x[labels==label]), np.asarray(y[labels==label]),
+                           np.asarray(z[labels==label]), c=colors[label], label=cur_label)
+            plt.show()
 
-        else:
-            ax = fig.gca()
-            for label in legend:
-                cur_label = legend[label]
-                ax.scatter(np.asarray(x[labels==label]), np.asarray(y[labels==label]),
-                           c=colors[label], label=cur_label)
-                plt.show()
-        i += 1
+    else:
+        ax = fig.gca()
+        for label in legend:
+            cur_label = legend[label]
+            ax.scatter(np.asarray(x[labels==label]), np.asarray(y[labels==label]),
+                       c=colors[label], label=cur_label)
+            plt.show()
+    i += 1
 
     plt.legend()
 
@@ -312,15 +314,29 @@ def knn_clustering(data, labels, neighbors_num=N_NEIGHBORS):
     pred_std = np.std(accuracy)
     return pred_mean, pred_std
 
+def svm_cross_val(data, labels):
+    accuracy = []
+    clf = svm.SVC(kernel='rbf')
+    combined = list(zip(data, labels))
+    np.random.shuffle(combined)
+    d, l = zip(*combined)
+    score = cross_val_score(clf, X=d, y=l, cv=5)
+    accuracy = accuracy + list(score)
+    pred_mean = np.mean(accuracy)
+    pred_std = np.std(accuracy)
+    return pred_mean, pred_std
+
 def extract_state(data, labels, label_to_extract):
-    d_out = []
-    l_out = []
-    for d,l in zip(data,labels):
-        cur_d = [d1 for d1, l1 in zip(d,l) if l1 == label_to_extract]
-        cur_l = [l1 for l1 in l if l1 == label_to_extract]
-        d_out.append(cur_d)
-        l_out.append(cur_l)
-    return d_out, l_out
+    '''
+    Extract certain data with certain labels - for ignoring blinking data
+    :param data: 
+    :param labels: 
+    :param label_to_extract: 
+    :return: 
+    '''
+    cur_d = [d1 for d1, l1 in zip(data, labels) if l1 == label_to_extract]
+    cur_l = [l1 for l1 in labels if l1 == label_to_extract]
+    return cur_d, cur_l
 
 def pair_wise_knn(data, labels, nn=3):
     '''
@@ -337,57 +353,83 @@ def pair_wise_knn(data, labels, nn=3):
     pred_0v2, std_0v2 = knn_clustering(data_02, labels_02, neighbors_num=nn)
     return (pred_0v2, std_0v2)
 
+def preprocess_data(eeg_data, cut_band):
+    '''
+    
+    :param eeg_data: data input (in frequency domain!)
+    :param cut_band: 2 values - [freq_low, freq_high]  [Hz]
+    :return: eeg_cut: processed data - cutted values (NOT FILTERED) between [ cut_band[0] , cut_band[1] ]
+    '''
+    num_samples_per_window = FS * TIME_FRAME
+    freq_high_per_window = int(FS / 2)
+    delta_f = freq_high_per_window / num_samples_per_window
+    cut_band_ind_low = int(cut_band[0] / delta_f)
+    cut_band_ind_high = int(cut_band[1] / delta_f)
+    eeg_cut = [x[cut_band_ind_low:cut_band_ind_high, :] for x in eeg_data]
+
+    return eeg_cut
+
 if __name__ == '__main__':
     # --- Part A - loading saved data (working offline) --- #
     # ----------------------------------------------------- #
     cur_path = os.path.dirname(os.path.realpath(__file__))
     records_path = os.path.join(cur_path, 'Data')
     # records_path = 'C:\\Users\\ranbenizhak\\OneDrive\\BCI\\BCI_project\\Data\\'
+
     file_names = os.listdir(records_path)
     full_paths = [os.path.join(records_path, fn) for fn in file_names if 'Aviv' in fn]
 
-    # # ==== Displaying averaging examples for different modes (open/closed/blink) ==== #
-    # # =================  currently working with channels 2,5,6,8 ==================== #
-
-    # eeg_fft_unfilt, eeg_fft_filtered = load_and_filter_data(full_paths[0])
-
-    # eeg_list = get_eeg_o_c_b(eeg_fft_filtered, HALF_WIN_AVG)
-    # configs = 'Overlap factor - ' + str(OVERLAP) + ' || Avg_window - ' + str(HALF_WIN_AVG)
-    # show_example(eeg_list, configs)
-
-
-
     # ======= Diffusion maps for data ========= #
-    for dimension in range(2,5):
+    exp_mean, exp_std, exp_eigvals = {}, {}, {}
+    svm_mean = {}
+    for exp_ind, data_path in enumerate(full_paths):  # for each experiment
+        eeg_fft_unfilt, eeg_fft_filt = load_and_filter_data(data_path)
+        eeg_preprocessed = preprocess_data(eeg_fft_unfilt, [7, 13])
+        labels, legend = get_aviv_exp_timeframes(eeg_preprocessed)
+        eeg_flatten = np.asarray([x.flatten() for x in eeg_preprocessed])
 
-        coords_out, labels_out = [], []
-        for data_path in full_paths:  # for each experiment
-            eeg_fft_unfilt, eeg_fft_filt = load_and_filter_data(data_path)
-            # eeg_unfilt, eeg_filt = load_and_filter_data(data_path, filter=False)
-            eeg_filt_cut = [x[10:100, :] for x in eeg_fft_unfilt]
-            labels, legend = get_aviv_exp_timeframes(eeg_filt_cut)
-            eeg_flatten = np.asarray([x.flatten() for x in eeg_filt_cut])
-
+        # ==== Using only Open / Close data ==== #
+        data_0, labels_0 = extract_state(eeg_flatten, labels, 0)
+        data_2, labels_2 = extract_state(eeg_flatten, labels, 2)
+        data_02 = data_0 + data_2
+        labels_02 = labels_0 + labels_2
+        # ====================================== #
+        cur_mean, cur_std, cur_eig = [], [], []
+        for dimension in range(DIM_RNG_LOW, DIM_RNG_HIGH):
+            coords_out, labels_out = [], []
             # other embedding visualization methods
             # visualize_eeg(eeg_flatten[:-1], labels[:-1], legend, FS, domain='Freq', meth='tsne', dim=3)
-
             epsilon = 1000  # diffusion distance epsilon
-            coords, dataList, eigvals = dm.diffusionMapping(eeg_flatten[:-1],
+            coords, dataList, eigvals = dm.diffusionMapping(data_02[:-1],
                                                    lambda x, y: math.exp(-LA.norm(x - y) / epsilon),
                                                    t=2, dim=dimension)
-            labels_out.append(labels[:-1])
+            labels_out.append(labels_02[:-1])
             coords_out.append(coords)
+            pred_mean, pred_std = knn_clustering(coords_out, labels_out)
+            cur_mean.append(pred_mean)
+            cur_std.append(pred_std)
+            cur_eig.append(eigvals)
 
-        for nn in range(3,9,2):
-            zero_v_one = pair_wise_knn(coords_out, labels_out, nn)
+        exp_mean[exp_ind] = cur_mean
+        exp_std[exp_ind] = cur_std
+        exp_eigvals[exp_ind] = cur_eig
 
-            print("Diffusion Dimension - " + str(dimension))
-            print("Neighbors num - " + str(nn))
-            print("Accuracy mean=" + str(zero_v_one[0]) + "   STD=" + str(zero_v_one[1]))
+        svm_pred_mean, svm_pred_std = svm_cross_val(data_02, labels_02)
+        svm_mean[exp_ind] = svm_pred_mean
+        # show_diffusion(coords_out[0], labels_out[0], legend)
+
+    for j in range(4):
+        print("Experiment - " + str(j+1))
+        for i in range(DIM_RNG_HIGH - DIM_RNG_LOW):
+            print("Diffusion Dimension - " + str(i+1))
+            print("Accuracy mean=" + str(exp_mean[j][i]) + "   STD=" + str(exp_std[j][i]))
             print("Eigan Values - ")
-            print(str(eigvals))
-            print("==========================================================")
-    # show_diffusion(coords_out, labels_out, legend)
+            print(str(exp_eigvals[j][i]))
+            print("-----------------------------")
+        print("SVM baseline prediction rate- " + str(svm_mean[j]))
+        print("==========================================================")
+
+
 
     # ===== Calculating clusters centers ===== #
     # pred_mean, pred_std = knn_clustering(coords_out, labels_out)
