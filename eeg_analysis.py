@@ -9,7 +9,6 @@ from mpl_toolkits.mplot3d import Axes3D
 from sklearn.neighbors import KNeighborsClassifier as knn
 from sklearn.model_selection import cross_val_score
 from sklearn import manifold, decomposition, svm
-import time
 
 
 ACTIVE_CHANNELS = (2, 5, 6, 8)
@@ -50,44 +49,44 @@ def show_3D(X_embedded, labels, fig, meth, domain):
             ax.scatter(np.asarray(X_embedded[indices,0]),np.asarray(X_embedded[indices,1]),np.asarray(X_embedded[indices,2]),label=legend[i])
         plt.show()
 
-def visualize_eeg(eeg_data, labels, legend, fs, domain='Freq', meth='tsne', dim=2):
-    '''
-    Visualize the input eeg data in time domain
-    :param eeg_data: 2d time domain eeg data - [samples, channels]
-    :param fs: sample frequency (for axis labels)
-    :param labels: labels of eeg dataset according to labels
-    :param legend: legend of data and labels tagging
-    :param domain: 'Time'/ 'Freq' - the domain we want to visualize in. Note: Data is recived in frequency domain and entering time does not take mean into account 
-    :param meth: 'tsne'/ 'lle'/ 'pca'/ 'isomap' - the method used for data embedding in lower dimensional space
-    :param dim: 2(default)/ 3 - the dimenssion to show the data in
-    :return: None
-    '''
-
-    # preform lower dimenstional embbeding and show the results
-    if meth=='tsne':
- #       print eeg_data.shape
- #       eeg_data_float64 = np.asarray(eeg_data).astype('float64')
- #       eeg_data_float64 = eeg_data_float64.reshape((eeg_data_float64.shape[0], -1))
-        X_embedded=manifold.TSNE(dim).fit_transform(eeg_data)
-    elif meth=='lle':
-        X_embedded= manifold.LocallyLinearEmbedding(n_neighbors, dim,eigen_solver='auto', method='standard').fit_transform(X)
-    elif meth=='pca':
-        X_embedded=decomposition.PCA(dim).fit_transform(eeg_data)
-    elif meth=='isomap':
-        X_embedded=manifold.Isomap(n_neighbors, dim).fit_transform(eeg_data)
-    # If we want to visualize in frequency domain/time domain
-    # if domain=='Time':
-    #     X_embedded=np.fft.ifftshift(fftpack.ifft((eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME, :]),
-    #                         axes=1))
-    #Plot the data visualization
-    # fig = plt.figure()
-    if dim==2:
-        show_embedded(X_embedded,labels,legend)
-    elif dim==3:
-        fig = plt.figure()
-        show_3D(X_embedded,labels,fig,meth,domain)
-    else:
-        print("Please set dimension to 2/3 for visualization")
+# def visualize_eeg(eeg_data, labels, legend, fs, domain='Freq', meth='tsne', dim=2):
+#     '''
+#     Visualize the input eeg data in time domain
+#     :param eeg_data: 2d time domain eeg data - [samples, channels]
+#     :param fs: sample frequency (for axis labels)
+#     :param labels: labels of eeg dataset according to labels
+#     :param legend: legend of data and labels tagging
+#     :param domain: 'Time'/ 'Freq' - the domain we want to visualize in. Note: Data is recived in frequency domain and entering time does not take mean into account
+#     :param meth: 'tsne'/ 'lle'/ 'pca'/ 'isomap' - the method used for data embedding in lower dimensional space
+#     :param dim: 2(default)/ 3 - the dimenssion to show the data in
+#     :return: None
+#     '''
+#
+#     # preform lower dimenstional embbeding and show the results
+#     if meth=='tsne':
+#  #       print eeg_data.shape
+#  #       eeg_data_float64 = np.asarray(eeg_data).astype('float64')
+#  #       eeg_data_float64 = eeg_data_float64.reshape((eeg_data_float64.shape[0], -1))
+#         X_embedded=manifold.TSNE(dim).fit_transform(eeg_data)
+#     elif meth=='lle':
+#         X_embedded= manifold.LocallyLinearEmbedding(n_neighbors, dim,eigen_solver='auto', method='standard').fit_transform(X)
+#     elif meth=='pca':
+#         X_embedded=decomposition.PCA(dim).fit_transform(eeg_data)
+#     elif meth=='isomap':
+#         X_embedded=manifold.Isomap(n_neighbors, dim).fit_transform(eeg_data)
+#     # If we want to visualize in frequency domain/time domain
+#     # if domain=='Time':
+#     #     X_embedded=np.fft.ifftshift(fftpack.ifft((eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME, :]),
+#     #                         axes=1))
+#     #Plot the data visualization
+#     # fig = plt.figure()
+#     if dim==2:
+#         show_embedded(X_embedded,labels,legend)
+#     elif dim==3:
+#         fig = plt.figure()
+#         show_3D(X_embedded,labels,fig,meth,domain)
+#     else:
+#         print("Please set dimension to 2/3 for visualization")
 
 def datestr2num(time_str):
     h, m, s = time_str.split(':')
@@ -369,6 +368,93 @@ def preprocess_data(eeg_data, cut_band):
 
     return eeg_cut
 
+def show_embedded_all(coordinates_tsne,coordinates_lle,coordinates_pca, coordinates_isomap, labels, legend):
+    colors = ['red', 'green', 'blue']
+    fig = plt.figure()
+    ax_221 = fig.add_subplot(221)
+    ax_221.set_title('Tsne')
+    a = np.asarray(coordinates_tsne)
+    x = a[:, 0]
+    y = a[:, 1]
+    for label in legend:
+        cur_label = legend[label]
+        plt.scatter(x[labels==label], y[labels==label], c=colors[label], label=cur_label)
+    ax_222 = fig.add_subplot(222)
+    ax_222.set_title('LLE')
+    a = np.asarray(coordinates_lle)
+    x = a[:, 0]
+    y = a[:, 1]
+    for label in legend:
+        cur_label = legend[label]
+        plt.scatter(x[labels == label], y[labels == label], c=colors[label], label=cur_label)
+    ax_223 = fig.add_subplot(223)
+    ax_223.set_title('PCA')
+    a = np.asarray(coordinates_pca)
+    x = a[:, 0]
+    y = a[:, 1]
+    for label in legend:
+        cur_label = legend[label]
+        plt.scatter(x[labels == label], y[labels == label], c=colors[label], label=cur_label)
+    ax_224 = fig.add_subplot(224)
+    ax_224.set_title('Isomap')
+    a = np.asarray(coordinates_isomap)
+    x = a[:, 0]
+    y = a[:, 1]
+    for label in legend:
+        cur_label = legend[label]
+        plt.scatter(x[labels == label], y[labels == label], c=colors[label], label=cur_label)
+    plt.legend(loc=2)
+    plt.suptitle('2-D Visualization of eeg data')
+    plt.show()
+
+def visualize_eeg(eeg_data, labels, legend, fs, domain='Freq', meth='tsne', dim=2):
+    '''
+    Visualize the input eeg data in time domain
+    :param eeg_data: 2d time domain eeg data - [samples, channels]
+    :param fs: sample frequency (for axis labels)
+    :param labels: labels of eeg dataset according to labels
+    :param legend: legend of data and labels tagging
+    :param domain: 'Time'/ 'Freq' - the domain we want to visualize in. Note: Data is recived in frequency domain and entering time does not take mean into account 
+    :param meth: 'tsne'/ 'lle'/ 'pca'/ 'isomap' - the method used for data embedding in lower dimensional space
+    :param dim: 2(default)/ 3 - the dimenssion to show the data in
+    :return: None
+    '''
+
+    # preform lower dimenstional embbeding and show the results
+    if meth=='tsne':
+ #       print eeg_data.shape
+ #       eeg_data_float64 = np.asarray(eeg_data).astype('float64')
+ #       eeg_data_float64 = eeg_data_float64.reshape((eeg_data_float64.shape[0], -1))
+        X_embedded=manifold.TSNE(dim).fit_transform(eeg_data)
+    elif meth=='lle':
+        X_embedded= manifold.LocallyLinearEmbedding(n_neighbors, dim,eigen_solver='auto', method='standard').fit_transform(eeg_data)
+    elif meth=='pca':
+        X_embedded=decomposition.PCA(dim).fit_transform(eeg_data)
+    elif meth=='isomap':
+        X_embedded=manifold.Isomap(n_neighbors, dim).fit_transform(eeg_data)
+    elif meth=='all':
+        X_embedded_tsne=manifold.TSNE(dim).fit_transform(eeg_data)
+        X_embedded_lle = manifold.LocallyLinearEmbedding(n_neighbors, dim, eigen_solver='auto',
+                                                 method='standard').fit_transform(eeg_data)
+        X_embedded_pca = decomposition.PCA(dim).fit_transform(eeg_data)
+        X_embedded_isomap = manifold.Isomap(n_neighbors, dim).fit_transform(eeg_data)
+        show_embedded_all(X_embedded_tsne, X_embedded_lle, X_embedded_pca, X_embedded_isomap, labels, legend)
+
+    # If we want to visualize in frequency domain/time domain
+    # if domain=='Time':
+    #     X_embedded=np.fft.ifftshift(fftpack.ifft((eeg_data[i * start_diff:i * start_diff + SAMPLES_PER_FRAME, :]),
+    #                         axes=1))
+    #Plot the data visualization
+    # fig = plt.figure()
+    if dim==2 and meth!='all':
+        show_embedded(X_embedded,labels,legend)
+    elif dim==3 and meth!='all':
+        fig = plt.figure()
+        show_3D(X_embedded,labels,fig,meth,domain)
+    else:
+        if meth!='all':
+            print("Please set dimension to 2/3 for visualization")
+
 if __name__ == '__main__':
     # --- Part A - loading saved data (working offline) --- #
     # ----------------------------------------------------- #
@@ -384,7 +470,7 @@ if __name__ == '__main__':
     svm_mean = {}
     for exp_ind, data_path in enumerate(full_paths):  # for each experiment
         eeg_fft_unfilt, eeg_fft_filt = load_and_filter_data(data_path)
-        eeg_preprocessed = preprocess_data(eeg_fft_unfilt, [7, 13])
+        eeg_preprocessed = preprocess_data(eeg_fft_unfilt, [5, 50])
         labels, legend = get_aviv_exp_timeframes(eeg_preprocessed)
         eeg_flatten = np.asarray([x.flatten() for x in eeg_preprocessed])
 
