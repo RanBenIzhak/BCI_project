@@ -521,6 +521,9 @@ if __name__ == '__main__':
     # pred_mean, pred_std = knn_clustering(coords_out, labels_out)
     ttt = 5
 
+# run a blank test
+
+# write to excel the results of the experiments
 
 
 
