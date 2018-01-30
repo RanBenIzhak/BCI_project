@@ -47,9 +47,7 @@ def write_xml(filename, mean, std, eigvals,
                     sh.write(1, col_ind, mean[l][i][j][k])
                     sh.write(2, col_ind, std[l][i][j][k])
                     eigvals_str = ''
-                    # if np.isscalar(eigvals[l][i][k]):
-                    #     sh.write(3, col_ind, eigvals[l][i][k])
-                    # else:
+
                     sh.write(3, col_ind, [eigvals_str + x for x in eigvals[l][i][k]])
                     if SVM:
                         sh.write(4, col_ind, mean_svm[l])

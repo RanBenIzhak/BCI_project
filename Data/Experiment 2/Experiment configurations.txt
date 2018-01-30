@@ -1,0 +1,4 @@
+5 electrodes ( Cz(2) C3(3) C4(4), O1(7), O2(6))
+Fpz - bias
+Ear - GND
+Open-closed-open-closed (2.5 minutes)
